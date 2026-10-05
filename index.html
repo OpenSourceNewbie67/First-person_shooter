@@ -3308,21 +3308,39 @@ function handleGyro(e) {
   if (!settings.gyro || gameState !== 'playing') return;
   if (e.beta === null || e.gamma === null) return;
   if (editing) return;
+
   const rawBeta = e.beta, rawGamma = e.gamma;
   if (gyroLastBeta === null) { gyroLastBeta = rawBeta; gyroLastGamma = rawGamma; return; }
+
   let dBeta = rawBeta - gyroLastBeta;
   let dGamma = rawGamma - gyroLastGamma;
-  if (dBeta > 180) dBeta -= 360; if (dBeta < -180) dBeta += 360;
-  if (dGamma > 180) dGamma -= 360; if (dGamma < -180) dGamma += 360;
-  gyroLastBeta = rawBeta; gyroLastGamma = rawGamma;
+  if (dBeta > 180) dBeta -= 360;
+  if (dBeta < -180) dBeta += 360;
+  if (dGamma > 180) dGamma -= 360;
+  if (dGamma < -180) dGamma += 360;
+  gyroLastBeta = rawBeta;
+  gyroLastGamma = rawGamma;
+
   let angle = 0;
   try { angle = (screen.orientation && screen.orientation.angle) || window.orientation || 0; } catch (err) {}
-  let yawDelta, pitchDelta;
-  if (angle === 90 || angle === -90 || angle === 270) { yawDelta = dBeta; pitchDelta = dGamma; }
-  else { yawDelta = dGamma; pitchDelta = dBeta; }
+
+  let yawDelta, pitchDelta, yawSign;
+  if (angle === 90 || angle === -90 || angle === 270) {
+    /* 横屏：beta 控制水平旋转，gamma 控制俯仰 */
+    yawDelta = dBeta;
+    pitchDelta = dGamma;
+    yawSign = +1;    /* ✨ 横屏下 yaw 用加号（原来是减号，方向反了） */
+  } else {
+    /* 竖屏：gamma 控制水平旋转，beta 控制俯仰 */
+    yawDelta = dGamma;
+    pitchDelta = dBeta;
+    yawSign = -1;    /* 竖屏保持原方向 */
+  }
+
   const sensMul = adsT > 0.5 ? ADS_SENS_MULT : 1.0;
   const k = settings.gyroSens * 0.0075 * sensMul;
-  player.yaw -= yawDelta * k;
+
+  player.yaw += yawDelta * k * yawSign;
   player.pitch -= pitchDelta * k;
   player.pitch = Math.max(-1.35, Math.min(1.35, player.pitch));
 }
