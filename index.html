@@ -1329,9 +1329,28 @@ function loadSettings() {
     const raw = localStorage.getItem(SETTINGS_KEY);
     if (raw) {
       const o = JSON.parse(raw);
-      Object.assign(settings, o);
-      ['btnFire','btnReload','btnADS','btnJump','btnLeanL','btnLeanR','btnDash'].forEach(k => {
-        if (o[k]) Object.assign(settings[k], o[k]);
+      /* 保证每个按钮配置都是完整对象，缺字段用默认值补齐 */
+      const defBtns = {
+        btnFire:   { left: 78, top: 80, size: 1.0 },
+        btnReload: { left: 60, top: 82, size: 1.0 },
+        btnADS:    { left: 78, top: 62, size: 1.0 },
+        btnJump:   { left: 45, top: 80, size: 1.0 },
+        btnLeanL:  { left: 8,  top: 72, size: 1.0 },
+        btnLeanR:  { left: 20, top: 72, size: 1.0 },
+        btnDash:   { left: 62, top: 62, size: 1.0 }
+      };
+      Object.keys(defBtns).forEach(k => {
+        if (o[k]) {
+          settings[k] = {
+            left: typeof o[k].left === 'number' ? o[k].left : defBtns[k].left,
+            top:  typeof o[k].top  === 'number' ? o[k].top  : defBtns[k].top,
+            size: typeof o[k].size === 'number' ? o[k].size : defBtns[k].size
+          };
+        }
+      });
+      /* 其他字段直接覆盖 */
+      ['gyro','gyroSens','outline','lookSens','adsToggle','quality'].forEach(k => {
+        if (o[k] !== undefined) settings[k] = o[k];
       });
     }
   } catch(e) {}
@@ -4216,33 +4235,35 @@ qualityGroup.querySelectorAll('.qbtn').forEach(btn => {
   }, true);
 });
 
-/* 拖拽 */
+/* 拖拽（改用 getter 动态获取 config，避免 settings 对象被替换后引用失效） */
 let draggingBtn = null;
 let dragStartTouchX = 0, dragStartTouchY = 0;
 let dragStartLeftPct = 0, dragStartTopPct = 0;
 
-function makeDraggable(el, cfg) {
-  el.addEventListener('touchstart', e => {
+function makeDraggable(el, getCfg) {
+  const startDrag = (clientX, clientY) => {
     if (!editing) return;
     if (draggingBtn) return;
-    e.preventDefault(); e.stopPropagation();
-    const t = e.changedTouches[0];
-    draggingBtn = { el, cfg };
-    dragStartTouchX = t.clientX;
-    dragStartTouchY = t.clientY;
+    const cfg = getCfg();
+    if (!cfg) return;
+    draggingBtn = { el, getCfg };
+    dragStartTouchX = clientX;
+    dragStartTouchY = clientY;
     dragStartLeftPct = cfg.left;
     dragStartTopPct = cfg.top;
+  };
+
+  el.addEventListener('touchstart', e => {
+    if (!editing) return;
+    e.preventDefault(); e.stopPropagation();
+    const t = e.changedTouches[0];
+    startDrag(t.clientX, t.clientY);
   }, { passive: false });
 
   el.addEventListener('mousedown', e => {
     if (!editing) return;
-    if (draggingBtn) return;
     e.preventDefault(); e.stopPropagation();
-    draggingBtn = { el, cfg };
-    dragStartTouchX = e.clientX;
-    dragStartTouchY = e.clientY;
-    dragStartLeftPct = cfg.left;
-    dragStartTopPct = cfg.top;
+    startDrag(e.clientX, e.clientY);
   });
 }
 
@@ -4251,8 +4272,10 @@ function handleDragMove(clientX, clientY) {
   const w = window.innerWidth, h = window.innerHeight;
   const dxPct = ((clientX - dragStartTouchX) / w) * 100;
   const dyPct = ((clientY - dragStartTouchY) / h) * 100;
-  draggingBtn.cfg.left = Math.max(2, Math.min(98, dragStartLeftPct + dxPct));
-  draggingBtn.cfg.top = Math.max(2, Math.min(98, dragStartTopPct + dyPct));
+  const cfg = draggingBtn.getCfg();   /* ← 每次移动都重新获取 */
+  if (!cfg) return;
+  cfg.left = Math.max(2, Math.min(98, dragStartLeftPct + dxPct));
+  cfg.top  = Math.max(2, Math.min(98, dragStartTopPct + dyPct));
   applyButtonLayout();
 }
 
@@ -4290,13 +4313,14 @@ document.addEventListener('mouseup', e => {
   handleDragEnd();
 });
 
-makeDraggable(btnFire, settings.btnFire);
-makeDraggable(btnReload, settings.btnReload);
-makeDraggable(btnADS, settings.btnADS);
-makeDraggable(btnJump, settings.btnJump);
-makeDraggable(btnLeanL, settings.btnLeanL);
-makeDraggable(btnLeanR, settings.btnLeanR);
-makeDraggable(btnDash, settings.btnDash);
+/* ✨ 传入函数，动态获取当前的 settings 对象 */
+makeDraggable(btnFire,   () => settings.btnFire);
+makeDraggable(btnReload, () => settings.btnReload);
+makeDraggable(btnADS,    () => settings.btnADS);
+makeDraggable(btnJump,   () => settings.btnJump);
+makeDraggable(btnLeanL,  () => settings.btnLeanL);
+makeDraggable(btnLeanR,  () => settings.btnLeanR);
+makeDraggable(btnDash,   () => settings.btnDash);
 
 /* ============================================================
    设置项
@@ -4407,4 +4431,4 @@ setTimeout(() => {
 }, 400);
 </script>
 </body>
-</html>
+  </html>
