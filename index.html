@@ -98,10 +98,10 @@
     transition:opacity .08s;}
 
   #flashBlind{
-    position:absolute;inset:0;background:rgba(0,0,0,0);opacity:0;pointer-events:none;
-    z-index:30;transition:opacity .1s;
+    position:absolute;inset:0;background:#000;opacity:0;pointer-events:none;
+    z-index:30;
+    /* ✨ 透明度由 JS 每帧控制，这里不加 CSS transition */
   }
-  #flashBlind.active{opacity:1;background:#000;}
 
   #topbar{position:absolute;top:0;left:0;right:0;padding:calc(env(safe-area-inset-top,0px) + 10px) 14px 0;
     display:flex;justify-content:space-between;align-items:flex-start;}
@@ -248,24 +248,27 @@
   .throwCount{font-size:10px;color:#ffd24a;font-weight:700;}
 
   #shopBtn{
-    position:fixed;left:50%;top:50%;transform:translate(-50%,-50%) scale(0.7);
+    position:fixed;left:50%;top:70%;transform:translate(-50%,-50%) scale(0.7);
     z-index:60;pointer-events:none;opacity:0;
     display:flex;flex-direction:column;align-items:center;justify-content:center;
-    padding:22px 36px;border-radius:24px;
+    padding:12px 24px;border-radius:16px;
     background:linear-gradient(135deg, rgba(92,255,208,.98), rgba(40,200,255,.98));
-    box-shadow:0 0 40px rgba(80, 240, 220, .55), 0 8px 24px rgba(0,0,0,.5);
+    box-shadow:0 0 28px rgba(80, 240, 220, .55), 0 6px 18px rgba(0,0,0,.5);
     color:#001a18;font-weight:800;letter-spacing:1px;
-    border:3px solid rgba(255,255,255,.55);
+    border:2px solid rgba(255,255,255,.55);
     transition:opacity .28s, transform .28s cubic-bezier(.2,1.2,.5,1);
     cursor:pointer;touch-action:none;}
   #shopBtn.show{
     pointer-events:auto;opacity:1;transform:translate(-50%,-50%) scale(1);
   }
   #shopBtn:active{transform:translate(-50%,-50%) scale(0.94);}
-  #shopBtn .shopBtnIcon{font-size:46px;line-height:1;margin-bottom:6px;
+  #shopBtn .shopBtnIcon{font-size:30px;line-height:1;margin-bottom:2px;
     filter:drop-shadow(0 3px 6px rgba(0,0,0,.25));}
-  #shopBtn .shopBtnText{font-size:22px;letter-spacing:5px;font-weight:900;}
-  #shopBtn .shopBtnHint{font-size:11px;margin-top:6px;opacity:.72;letter-spacing:1.5px;font-weight:600;}
+  #shopBtn .shopBtnText{font-size:15px;letter-spacing:3px;font-weight:900;}
+  #shopBtn .shopBtnCountdown{
+    font-size:13px;margin-top:3px;font-weight:800;letter-spacing:1px;
+    color:#003a2a;background:rgba(255,255,255,.5);border-radius:8px;
+    padding:1px 10px;min-width:52px;text-align:center;}
 
   .screen{position:fixed;inset:0;z-index:50;display:flex;flex-direction:column;
     align-items:center;justify-content:center;text-align:center;padding:30px;
@@ -517,7 +520,7 @@
 <div id="shopBtn">
   <div class="shopBtnIcon">🛒</div>
   <div class="shopBtnText">补给站</div>
-  <div class="shopBtnHint">点击打开商店</div>
+  <div class="shopBtnCountdown" id="shopBtnCountdown">15.0s</div>
 </div>
 
 <div id="btnTopRight">
@@ -1269,6 +1272,7 @@ const player = {
   speedBoostT: 0, jumpBoostT: 0, meleeAnim: 0, sprinting: false,
   lean: 0, leanTarget: 0,
   flashBlindT: 0,
+  flashBlindDuration:0,
   dash: {
     active: false,
     t: 0,
@@ -1965,14 +1969,15 @@ function explodeFlashbang(pos, fromEnemy) {
         const checkObjs = [...walls, ...obstacleMeshes];
         const hits = ray.intersectObjects(checkObjs, false);
         if (hits.length > 0) hasLineOfSight = false;
-        if (hasLineOfSight) {
-          player.flashBlindT = FLASH_DURATION;
-          elFlashBlind.classList.add('active');
-        }
+              if (hasLineOfSight) {
+        player.flashBlindT = FLASH_DURATION;
+        player.flashBlindDuration = FLASH_DURATION;
+        elFlashBlind.style.opacity = '0';
       }
     }
-  } else {
-    const cfg = ENEMY_THROW.flashbang;
+  }
+} else {
+  const cfg = ENEMY_THROW.flashbang;
     const pd = Math.hypot(player.pos.x - pos.x, player.pos.z - pos.z);
     if (pd < cfg.radius) {
       const dirToFlash = new THREE.Vector3(pos.x - player.pos.x, 0, pos.z - player.pos.z).normalize();
@@ -1988,9 +1993,10 @@ function explodeFlashbang(pos, fromEnemy) {
         const hits = ray.intersectObjects(checkObjs, false);
         if (hits.length > 0) hasLineOfSight = false;
         if (hasLineOfSight) {
-          player.flashBlindT = cfg.blindDuration;
-          elFlashBlind.classList.add('active');
-        }
+  player.flashBlindT = cfg.blindDuration;
+  player.flashBlindDuration = cfg.blindDuration;
+  elFlashBlind.style.opacity = '0';
+}
       }
     }
   }
@@ -2153,14 +2159,16 @@ function startPrep() {
 
 function updateWave(dt) {
   if (inPrep) {
-    prepTimer -= dt;
-    elShopTimer.textContent = Math.max(0, prepTimer).toFixed(1);
-    if (prepTimer <= 0) {
-      closeShop();
-      startWave(wave + 1);
-    }
-    return;
+  prepTimer -= dt;
+  const t = Math.max(0, prepTimer).toFixed(1);
+  elShopTimer.textContent = t;
+  elShopBtnCountdown.textContent = t + 's';
+  if (prepTimer <= 0) {
+    closeShop();
+    startWave(wave + 1);
   }
+  return;
+}
 
   waveTimer -= dt;
 
@@ -2215,6 +2223,7 @@ const shopPanel = document.getElementById('shopPanel');
 const shopItemsEl = document.getElementById('shopItems');
 const shopAttachEl = document.getElementById('shopAttachments');
 const elShopTimer = document.getElementById('shopTimer');
+const elShopBtnCountdown = document.getElementById('shopBtnCountdown');
 const shopBtn = document.getElementById('shopBtn');
 let shopOpen = false;
 
@@ -3627,13 +3636,29 @@ bindHold(btnDash, () => { tryDash(); }, null);
    更新
 ============================================================ */
 function updatePlayer(dt) {
-  if (player.flashBlindT > 0) {
-    player.flashBlindT -= dt;
-    if (player.flashBlindT <= 0) {
-      player.flashBlindT = 0;
-      elFlashBlind.classList.remove('active');
+  /* ✨ 闪光弹黑屏：带渐变过渡 */
+if (player.flashBlindT > 0) {
+  player.flashBlindT -= dt;
+  if (player.flashBlindT <= 0) {
+    player.flashBlindT = 0;
+    elFlashBlind.style.opacity = '0';
+  } else {
+    const total = player.flashBlindDuration || 2.0;
+    const elapsed = total - player.flashBlindT;
+    const remaining = player.flashBlindT;
+    const FADE_IN = 0.15;   /* 渐入 0.15 秒 */
+    const FADE_OUT = 0.25;  /* 渐出 0.25 秒 */
+    let alpha;
+    if (elapsed < FADE_IN) {
+      alpha = elapsed / FADE_IN;
+    } else if (remaining < FADE_OUT) {
+      alpha = remaining / FADE_OUT;
+    } else {
+      alpha = 1;
     }
+    elFlashBlind.style.opacity = alpha.toFixed(3);
   }
+}
 
   /* 冲刺冷却 */
   if (player.dash.cooldown > 0) player.dash.cooldown -= dt;
@@ -3929,7 +3954,7 @@ function startGame() {
   player.dash.active = false;
   player.dash.t = 0;
   player.dash.cooldown = 0;
-  elFlashBlind.classList.remove('active');
+  elFlashBlind.style.opacity = '0';
   elDashVignette.style.opacity = '0';
 
   loadout.guns = [{ id: 'pistol', ammo: WEAPONS.pistol.magSize }, { id: null, ammo: 0 }];
@@ -3997,7 +4022,7 @@ function gameOver() {
   player.dash.active = false;
   gunHolder.visible = true;
   elScope.style.opacity = '0';
-  elFlashBlind.classList.remove('active');
+  elFlashBlind.style.opacity = '0';
   elDashVignette.style.opacity = '0';
   player.flashBlindT = 0;
   closeShop(); hideThrowPanel(); hideSlotPicker(); hideShopButton();
